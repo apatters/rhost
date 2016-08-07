@@ -1,0 +1,11 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+export PYBUILD_NAME = apwo-storage-tests
+
+%:
+	dh $@ --with python2 --buildsystem=pybuild
+
+override_dh_install:
+	dh_install

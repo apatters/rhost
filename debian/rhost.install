@@ -1,0 +1,2 @@
+rhost/share/icons/* /usr/share/rhost/icons
+rhost/share/samples/* /usr/share/rhost/samples

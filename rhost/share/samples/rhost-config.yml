@@ -1,0 +1,62 @@
+# Global settings.
+---
+default_description:
+default_user: meathome
+default_domain:
+default_os: linux
+default_use_bastion: no
+default_bastion_fqdn: batman.mydomain.net
+default_bastion_user: meathome
+default_group: Home
+default_linux_terminal_cmd: /usr/bin/terminator --profile=remote -T %n -x ssh -X %u@%f
+default_linux_terminal_with_bastion_cmd: /usr/bin/terminator --profile=remote -T %n -x ssh -t %U@%b ssh -X %u@%f
+#default_linux_terminal_cmd: /usr/bin/roxterm --color-scheme=remote -T %n -e ssh -X %u@%f
+#default_linux_terminal_with_bastion_cmd: /usr/bin/roxterm --color-scheme=remote -T %n -e ssh -t %U@%b ssh -X %u@%f
+default_windows_terminal_cmd: /usr/bin/rdesktop -T %n -g 1600x1000 -u %u -d %D %f
+
+# Hosts
+---
+# Skunkworks group.
+tom:
+  fqdn: tom.skunkworks.com
+  description: build system
+  user: admin
+  group: Skunkworks
+  os: linux
+jerry:
+  fqdn: jerry.skunkworks.com
+  description: workstation
+  user: meatwork
+  group: Skunkworks
+  os: linux
+# A Windows host.
+sylvester:
+  fqdn: sylvester.skunkworks.com
+  description: Windows box
+  user: meatwork
+  domain: sylvester
+  group: Skunkworks
+  os: windows
+
+# Home group.
+batman:
+  fqdn: batman.mydomain.net
+  description: Joan's laptop
+  user: meathome
+  group: Home
+  os: linux
+robin:
+  fqdn: robin.mydomain.net
+  description: Our Server
+  user: meathome
+  group: Home
+  os: linux
+  use_bastion: yes
+  bastion_fqdn: batman.mydomian.net
+# Use defaults
+joker:
+  fqdn: joker.mydomain.net
+  description: My PC
+  use_bastion: yes
+
+

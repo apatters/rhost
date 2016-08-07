@@ -1,0 +1,307 @@
+#!/usr/bin/env python
+"""Open a terminal logged into a remote system."""
+
+__copyright__ = 'Copyright (C) 2016 Andrew Patterson'
+__credits__ = ['Andrew Patterson']
+__license__ = 'Proprietary'
+__version__ = '1.0'
+__maintainer__ = 'Andrew Patterson'
+__email__ = 'andrew.patterson@hpe.com'
+
+import argparse
+import gtk
+import inspect
+import os
+import sys
+import yaml
+
+RUNNING_DIR = os.path.dirname(os.path.abspath(sys.argv[0]))
+if RUNNING_DIR == '/usr/bin':
+    ICONS_DIR = os.path.join('/usr/share/rhost/icons')
+else:
+    ICONS_DIR = os.path.abspath(os.path.join(RUNNING_DIR, os.pardir, 'share/icons'))
+    sys.path.insert(0, os.path.abspath(os.path.join(RUNNING_DIR, os.pardir, 'lib')))
+
+import rhost.utils as utils
+from rhost.trace import TRACE
+
+
+options = None
+hosts = {}
+config = None
+
+PRG_NAME = utils.get_program_name()
+DEFAULT_CONFIG_FILE = '%s/.%s.yml' % (os.environ['HOME'], PRG_NAME)
+
+
+class OS_TYPE(utils.Enum):
+    UNKNOWN = 0
+    LINUX = 1
+    WINDOWS = 2
+
+    string_repr = {UNKNOWN: '?',
+                   LINUX: 'linux',
+                   WINDOWS: 'windows',}
+
+
+def truth_to_bool(word):
+    """Convert an english word (Yes, yes, True, true, No, no. False, false, None, or
+    empty string) to a boolean."""
+
+    if not word or word.lower() in ('no', 'false'):
+        return False
+    if word.lower() in ('yes', 'true'):
+        return True
+
+    raise(RhostException("Invalid truth value '%s'." % word))
+
+
+class RhostException(Exception):
+    """Base exception class"""
+
+    def __init__(self, msg=''):
+        super(RhostException, self).__init__(msg)
+
+
+class Config(object):
+    """Holds configuration data."""
+
+    def __init__(self, *pargs, **kwargs):
+        """Constructor."""
+
+        self.default_description = kwargs.pop('default_description', None)
+        self.default_user = kwargs.pop('default_user', None)
+        self.default_domain = kwargs.pop('default_domain', None)
+        self.default_os = OS_TYPE.val(kwargs.pop('default_os', None))
+        self.default_use_bastion = truth_to_bool(kwargs.pop('default_use_bastion', None))
+        self.default_bastion_fqdn = kwargs.pop('default_bastion_fqdn', None)
+        self.default_bastion_user = kwargs.pop('default_bastion_user', None)
+        self.default_group = kwargs.pop('default_group', None)
+        self.default_linux_terminal_cmd = kwargs.pop('default_linux_terminal_cmd', None)
+        self.default_linux_terminal_with_bastion_cmd = kwargs.pop('default_linux_terminal_with_bastion_cmd', None)
+        self.default_windows_terminal_cmd = kwargs.pop('default_windows_terminal_cmd', None)
+
+    def __str__(self):
+        fmt_str = '%r:%r ' * 11
+        return fmt_str % (
+            'default_description', self.default_description,
+            'default_user', self.default_user,
+            'default_domain', self.default_domain,
+            'default_os', OS_TYPE.str(self.default_os),
+            'default_use_bastion', self.default_use_bastion,
+            'default_bastion_fqdn', self.default_bastion_fqdn,
+            'default_bastion_user', self.default_bastion_user,
+            'default_group', self.default_group,
+            'default_linux_terminal_cmd', self.default_linux_terminal_cmd,
+            'default_linux_terminal_with_bastion_cmd', self.default_linux_terminal_with_bastion_cmd,
+            'default_windows_terminal_cmd', self.default_windows_terminal_cmd,
+        )
+
+class Host(object):
+    def __init__(self, config, *pargs, **kwargs):
+        """Constructor."""
+
+        self.config = config
+        self.name = kwargs.pop('name', None)
+        if not self.name:
+            raise RhostException("Missing 'name' in host definition,")
+        self.fqdn = kwargs.pop('fqdn', None)
+        if not self.fqdn:
+            raise RhostException("Missing 'fqdn' in host definition,")
+
+        self.description = kwargs.pop('description', config.default_description)
+        self.user = kwargs.pop('user', config.default_user)
+        self.domain = kwargs.pop('domain', config.default_domain)
+        self.os = OS_TYPE.val(kwargs.pop('os', OS_TYPE.str(config.default_os)))
+        self.use_bastion = kwargs.pop('use_bastion', config.default_use_bastion)
+        self.bastion_fqdn = kwargs.pop('bastion_fqdn', config.default_bastion_fqdn)
+        self.bastion_user = kwargs.pop('bastion_user', config.default_bastion_user)
+        self.group = kwargs.pop('group', config.default_group)
+
+        if kwargs:
+            invalid_parms = ', '.join(kwargs.keys())
+            raise RhostException("Unknown field(s) '%s' in host definition." % invalid_parms)
+        if pargs:
+            raise RhostException("Positional arguments not allowed in Host constructor.")
+
+    def __str__(self):
+        fmt_str = '%r:%r ' * 10
+        return fmt_str % (
+            'name', self.name,
+            'fqdn', self.fqdn,
+            'description', self.description,
+            'user', self.user,
+            'domain', self.domain,
+            'os', OS_TYPE.str(self.os),
+            'use_bastion', self.use_bastion,
+            'bastion_fqdn', self.bastion_fqdn,
+            'bastion_user', self.bastion_user,
+            'group', self.group,)
+
+    def __lt__(self, other):
+        return self.name < other.name
+
+    def substitute_fields(self, s):
+        """Make host field substitutions in string s."""
+
+        s = s.replace('%n', self.name or '')
+        s = s.replace('%f', self.fqdn or '')
+        s = s.replace('%d', self.description or '')
+        s = s.replace('%u', self.user or '')
+        s = s.replace('%D', self.domain or '')
+        s = s.replace('%o', OS_TYPE.str(self.os) or '')
+        s = s.replace('%b', self.bastion_fqdn or '')
+        s = s.replace('%U', self.bastion_user or '')
+        s = s.replace('%g', self.group or '')
+
+        return s
+
+
+class HostSelectionGui(object):
+
+    def host_callback(self, widget, host):
+
+
+        self.selected_host = host
+        gtk.main_quit()
+
+        return False
+
+    def create_hosts(self):
+
+        groups = {}
+        for host_name, host in hosts.items():
+            if host.group not in groups:
+                groups[host.group] = [host]
+            else:
+                groups[host.group].append(host)
+
+        vbox = gtk.VBox(False, 0)
+        for group in groups:
+            frame = gtk.Frame(group)
+            table = gtk.Table(len(groups) - 1, 3, False)
+            table.set_col_spacing(0, 5)
+            idx = 0
+            for host in sorted(groups[group]):
+                type_image = gtk.Image()
+                if host.os == OS_TYPE.LINUX:
+                    type_image.set_from_file(os.path.join(ICONS_DIR, 'Linux-icon.png'))
+                elif host.os == OS_TYPE.WINDOWS:
+                    type_image.set_from_file(os.path.join(ICONS_DIR, 'Windows-icon.png'))
+                type_image.show()
+                table.attach(type_image, 0, 1, idx, idx+1)
+                button = gtk.Button(host.name)
+                button.set_alignment(0, 0)
+                button.connect('clicked', self.host_callback, host)
+                button.show()
+                table.attach(button, 1, 2, idx, idx+1, xpadding=3)
+                desc_label = gtk.Label(host.description)
+                desc_label.set_alignment(0, 0.5)
+                desc_label.show()
+                table.attach(desc_label, 2, 3, idx, idx+1, xpadding=3)
+                idx += 1
+            frame.add(table)
+            table.show()
+            frame.show()
+            vbox.pack_start(frame, False, True, 5)
+
+        return vbox
+
+
+    def __init__(self):
+
+        self.selected_host = None
+
+        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        window.set_title("Remote Host")
+        window.set_border_width(10)
+
+        hosts = self.create_hosts()
+        hosts.show()
+
+        quit_button = gtk.Button(stock=gtk.STOCK_QUIT)
+        quit_button.connect('clicked', lambda w: gtk.main_quit())
+        quit_button.show()
+
+        quit_box = gtk.HBox(False, 0)
+        quit_box.pack_start(quit_button, True, False, 0)
+        quit_box.show()
+
+        vbox = gtk.VBox(False, 0)
+        vbox.pack_start(hosts, expand=False, fill=False)
+        vbox.pack_end(quit_box, expand=False, fill=False)
+
+        window.add(vbox)
+
+        vbox.show()
+        window.show()
+
+    def main(self, host=None):
+        gtk.main()
+
+
+def launch_host(host):
+
+    if host.os == OS_TYPE.LINUX:
+        if host.use_bastion:
+            cmd = host.substitute_fields(config.default_linux_terminal_with_bastion_cmd).split()
+        else:
+            cmd = host.substitute_fields(config.default_linux_terminal_cmd).split()
+        os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
+    elif host.os == OS_TYPE.WINDOWS:
+        cmd  = host.substitute_fields(config.default_windows_terminal_cmd).split()
+        os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
+
+def parse_options():
+    """Parse command-line options."""
+
+    global options
+
+    version = '%s %s' % (PRG_NAME, __version__)
+    description = """Open a terminal logged into a remote system."""
+
+    version_help = "Show program's version number and exit."
+    config_file_help = "Load configuration information from this file (default '%s')." % DEFAULT_CONFIG_FILE
+    host_help = "Host to launch."
+
+    parser = argparse.ArgumentParser(prog=PRG_NAME, description=description,
+                                     add_help=True)
+    parser.add_argument('--version', action='version', version=version,
+                        help=version_help)
+    parser.add_argument('-c', '--config', dest='config_file', type=argparse.FileType('r'),
+                        default=DEFAULT_CONFIG_FILE, help=config_file_help)
+    parser.add_argument('host', action='store', nargs='?', default=None, help=host_help)
+
+
+    options = parser.parse_args()
+
+
+def main():
+
+    global config
+    global host_to_launch
+
+    parse_options()
+
+    docs = yaml.load_all(options.config_file)
+    config_doc = docs.next()
+    config = Config(**config_doc)
+    hosts_doc = docs.next()
+    for (host_name, host_data) in hosts_doc.items():
+        hosts[host_name] = Host(config, name=host_name, **host_data)
+
+    if options.host:
+        if options.host not in hosts:
+            print "Error: unknown host %s" % options.host
+            sys.exit(1)
+        launch_host(hosts[options.host])
+    else:
+        # Sets host_to_launch
+        gui = HostSelectionGui()
+        gui.main()
+        if gui.selected_host:
+            launch_host(gui.selected_host)
+
+if __name__ == '__main__':
+
+    main()

@@ -1,0 +1,21 @@
+Source: rhost
+Section: utilities
+Priority: optional
+Maintainer: Andrew Patterson <andrew.patterson@hpe.com>
+Build-Depends: debhelper (>=9~),
+               dh-python,
+               python,
+               python-setuptools,
+X-Python-Version: >= 2.7
+Standards-Version: 3.9.3
+Homepage: https://hlinux-gitlab.us.rdlabs.hpecorp.net/apers/apwo-storage-tests
+Vcs-Git: https://hlinux-gitlab.us.rdlabs.hpecorp.net/apers/apwo-storage-tests.git
+Vcs-Browser: https://hlinux-gitlab.us.rdlabs.hpecorp.net/apers/apwo-storage-tests
+
+Package: rhost
+Architecture: all
+Depends: ${misc:Depends},
+         ${python:Depends},
+Description: Launch a terminal for a remote host.
+ Launch a terminal logged into a remote host from selection GUI.
+ 
