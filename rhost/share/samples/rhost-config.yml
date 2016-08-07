@@ -1,5 +1,7 @@
 # Global settings.
 ---
+sort_hosts: True
+sort_groups: False
 default_description:
 default_user: meathome
 default_domain:
