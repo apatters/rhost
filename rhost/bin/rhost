@@ -93,21 +93,38 @@ class RhostException(Exception):
 class Config(object):
     """Holds configuration data."""
 
+    DEFAULT_SORT_HOSTS = False
+    DEFAULT_SORT_GROUPS = False
+    DEFAULT_DESCRIPTION = None
+    DEFAULT_USER = None
+    DEFAULT_DOMAIN = None
+    DEFAULT_OS = OS_TYPE.LINUX
+    DEFAULT_USE_BASTION = False
+    DEFAULT_BASTION_FQDN =  None
+    DEFAULT_BASTION_USER = None
+    DEFAULT_GROUP = None
+    DEFAULT_LINUX_TERMINAL_CMD = '/usr/bin/gnome-terminal -x ssh -X %u@%f'
+    DEFAULT_LINUX_TERMINAL_WITH_BASTION_CMD = '/usr/bin/gnome-terminal -x ssh -t %U@%b ssh -X %u@%f'
+    DEFAULT_WINDOWS_TERMINAL_CMD = '/usr/bin/rdesktop -T %n -u %u -d %D %f'
+
     def __init__(self, *pargs, **kwargs):
         """Constructor."""
-        self.sort_hosts = truth_to_bool(kwargs.pop('sort_hosts', None))
-        self.sort_groups = truth_to_bool(kwargs.pop('sort_groups', None))
-        self.default_description = kwargs.pop('default_description', None)
-        self.default_user = kwargs.pop('default_user', None)
-        self.default_domain = kwargs.pop('default_domain', None)
-        self.default_os = OS_TYPE.val(kwargs.pop('default_os', None))
-        self.default_use_bastion = truth_to_bool(kwargs.pop('default_use_bastion', None))
-        self.default_bastion_fqdn = kwargs.pop('default_bastion_fqdn', None)
-        self.default_bastion_user = kwargs.pop('default_bastion_user', None)
-        self.default_group = kwargs.pop('default_group', None)
-        self.default_linux_terminal_cmd = kwargs.pop('default_linux_terminal_cmd', None)
-        self.default_linux_terminal_with_bastion_cmd = kwargs.pop('default_linux_terminal_with_bastion_cmd', None)
-        self.default_windows_terminal_cmd = kwargs.pop('default_windows_terminal_cmd', None)
+
+        self.sort_hosts = truth_to_bool(kwargs.pop('sort_hosts', self.DEFAULT_SORT_HOSTS))
+        self.sort_groups = truth_to_bool(kwargs.pop('sort_groups', self.DEFAULT_SORT_GROUPS))
+        self.default_description = kwargs.pop('default_description', self.DEFAULT_DESCRIPTION)
+        self.default_user = kwargs.pop('default_user', self.DEFAULT_USER)
+        self.default_domain = kwargs.pop('default_domain', self.DEFAULT_DOMAIN)
+        self.default_os = OS_TYPE.val(kwargs.pop('default_os', OS_TYPE.str(self.DEFAULT_OS)))
+        self.default_use_bastion = truth_to_bool(kwargs.pop('default_use_bastion', self.DEFAULT_USE_BASTION))
+        self.default_bastion_fqdn = kwargs.pop('default_bastion_fqdn', self.DEFAULT_BASTION_FQDN)
+        self.default_bastion_user = kwargs.pop('default_bastion_user', self.DEFAULT_BASTION_USER)
+        self.default_group = kwargs.pop('default_group', self.DEFAULT_GROUP)
+        self.default_linux_terminal_cmd = kwargs.pop('default_linux_terminal_cmd', self.DEFAULT_LINUX_TERMINAL_CMD)
+        self.default_linux_terminal_with_bastion_cmd = kwargs.pop('default_linux_terminal_with_bastion_cmd',
+                                                                  self.DEFAULT_LINUX_TERMINAL_WITH_BASTION_CMD)
+        self.default_windows_terminal_cmd = kwargs.pop('default_windows_terminal_cmd',
+                                                       self.DEFAULT_WINDOWS_TERMINAL_CMD)
 
     def __str__(self):
         fmt_str = '%r:%r ' * 13
@@ -294,13 +311,15 @@ def launch_host(host):
 
     if host.os == OS_TYPE.LINUX:
         if host.use_bastion:
-            cmd = host.substitute_fields(config.default_linux_terminal_with_bastion_cmd).split()
+            cmd = host.substitute_fields(config.default_linux_terminal_with_bastion_cmd)
         else:
-            cmd = host.substitute_fields(config.default_linux_terminal_cmd).split()
-        os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
+            cmd = host.substitute_fields(config.default_linux_terminal_cmd)
     elif host.os == OS_TYPE.WINDOWS:
-        cmd  = host.substitute_fields(config.default_windows_terminal_cmd).split()
-        os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
+        cmd  = host.substitute_fields(config.default_windows_terminal_cmd)
+    if options.debug:
+        print(cmd)
+    cmd = cmd.split()
+    os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
 
 def parse_options():
     """Parse command-line options."""
@@ -312,6 +331,7 @@ def parse_options():
 
     version_help = "Show program's version number and exit."
     config_file_help = "Load configuration information from this file (default '%s')." % DEFAULT_CONFIG_FILE
+    debug_help = 'Output debug information.'
     host_help = "Host to launch."
 
     parser = argparse.ArgumentParser(prog=PRG_NAME, description=description,
@@ -320,6 +340,9 @@ def parse_options():
                         help=version_help)
     parser.add_argument('-c', '--config', dest='config_file', type=argparse.FileType('r'),
                         default=DEFAULT_CONFIG_FILE, help=config_file_help)
+    parser.add_argument('-d', '--debug', dest='debug', action='store_true',
+                        help=debug_help)
+
     parser.add_argument('host', action='store', nargs='?', default=None, help=host_help)
 
 
