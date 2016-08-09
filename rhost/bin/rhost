@@ -187,7 +187,7 @@ class Host(object):
             'group', self.group,)
 
     def __lt__(self, other):
-        return self.name < other.name
+        return self.name.lower() < other.name,lower()
 
     def substitute_fields(self, s):
         """Make host field substitutions in string s."""
@@ -311,7 +311,7 @@ class HostSelectionGui(object):
         table = gtk.Table(rows=len(self.groups)-1, columns=1, homogeneous=False)
         idx = 0
         if self.config.sort_groups:
-            group_iter = sorted(self.groups).__iter__()
+            group_iter = sorted(self.groups, key=str.lower).__iter__()
         else:
             group_iter = self.groups.__iter__()
         for group in group_iter:
