@@ -28,8 +28,6 @@ from rhost.trace import TRACE
 
 
 options = None
-hosts = collections.OrderedDict()
-config = None
 
 PRG_NAME = utils.get_program_name()
 DEFAULT_CONFIG_FILE = '%s/.%s.yml' % (os.environ['HOME'], PRG_NAME)
@@ -95,6 +93,7 @@ class Config(object):
 
     DEFAULT_SORT_HOSTS = False
     DEFAULT_SORT_GROUPS = False
+    DEFAULT_USE_GROUP_BUTTONS = False
     DEFAULT_DESCRIPTION = None
     DEFAULT_USER = None
     DEFAULT_DOMAIN = None
@@ -112,6 +111,7 @@ class Config(object):
 
         self.sort_hosts = truth_to_bool(kwargs.pop('sort_hosts', self.DEFAULT_SORT_HOSTS))
         self.sort_groups = truth_to_bool(kwargs.pop('sort_groups', self.DEFAULT_SORT_GROUPS))
+        self.use_group_buttons = truth_to_bool(kwargs.pop('use_group_buttons', self.DEFAULT_USE_GROUP_BUTTONS))
         self.default_description = kwargs.pop('default_description', self.DEFAULT_DESCRIPTION)
         self.default_user = kwargs.pop('default_user', self.DEFAULT_USER)
         self.default_domain = kwargs.pop('default_domain', self.DEFAULT_DOMAIN)
@@ -131,6 +131,7 @@ class Config(object):
         return fmt_str % (
             'sort_hosts', self.sort_hosts,
             'sort_groups', self.sort_groups,
+            'use_group_buttons', self.use_group_buttons,
             'default_description', self.default_description,
             'default_user', self.default_user,
             'default_domain', self.default_domain,
@@ -206,73 +207,53 @@ class Host(object):
 
 class HostSelectionGui(object):
 
-    def host_callback(self, widget, host):
+    def __init__(self, config, hosts, groups):
 
+        self.config = config
+        self.hosts = hosts
+        self.groups = groups
+        self.selected_host = None
+        self.selected_group = None
+        self.main_window = None
+        self.main_window = None
+        self.hosts_selection_window = None
+
+        self.main_window = self.create_main_window()
+        self.main_window.show()
+
+    def host_callback(self, widget, host):
 
         self.selected_host = host
         gtk.main_quit()
 
         return False
 
-    def create_hosts(self):
+    def group_callback(self, widget, group):
 
-        groups = collections.OrderedDict()
-        for host_name, host in hosts.items():
-            if host.group not in groups:
-                groups[host.group] = [host]
-            else:
-                groups[host.group].append(host)
 
-        vbox = gtk.VBox(False, 0)
-        if config.sort_groups:
-            group_iter = sorted(groups).__iter__()
+        self.selected_group = group
+        self.hosts_selection_window = self.create_hosts_selection_window(group)
+        self.hosts_selection_window.show()
+
+        return False
+
+    def group_cancel_callback(self, widget):
+
+        self.hosts_selection_window.destroy()
+
+    def create_main_window(self):
+
+        main_window = gtk.Window(gtk.WINDOW_TOPLEVEL)
+        main_window.set_title("Remote Host")
+        main_window.set_border_width(10)
+        main_window.set_geometry_hints(min_width=200)
+
+        if self.config.use_group_buttons:
+            hosts_obj = self.create_hosts_in_group_frame()
         else:
-            group_iter = groups.__iter__()
-        for group in group_iter:
-            frame = gtk.Frame(group)
-            table = gtk.Table(len(groups) - 1, 3, False)
-            table.set_col_spacing(0, 5)
-            idx = 0
-            if config.sort_hosts:
-                host_iter = sorted(groups[group]).__iter__()
-            else:
-                host_iter = groups[group].__iter__()
-            for host in host_iter:
-                type_image = gtk.Image()
-                if host.os == OS_TYPE.LINUX:
-                    type_image.set_from_file(os.path.join(ICONS_DIR, 'Linux-icon.png'))
-                elif host.os == OS_TYPE.WINDOWS:
-                    type_image.set_from_file(os.path.join(ICONS_DIR, 'Windows-icon.png'))
-                type_image.show()
-                table.attach(type_image, 0, 1, idx, idx+1)
-                button = gtk.Button(host.name)
-                button.set_alignment(0, 0)
-                button.connect('clicked', self.host_callback, host)
-                button.show()
-                table.attach(button, 1, 2, idx, idx+1, xpadding=3)
-                desc_label = gtk.Label(host.description)
-                desc_label.set_alignment(0, 0.5)
-                desc_label.show()
-                table.attach(desc_label, 2, 3, idx, idx+1, xpadding=3)
-                idx += 1
-            frame.add(table)
-            table.show()
-            frame.show()
-            vbox.pack_start(frame, False, True, 5)
+             hosts_obj = self.create_hosts_by_group_vbox()
 
-        return vbox
-
-
-    def __init__(self):
-
-        self.selected_host = None
-
-        window = gtk.Window(gtk.WINDOW_TOPLEVEL)
-        window.set_title("Remote Host")
-        window.set_border_width(10)
-
-        hosts = self.create_hosts()
-        hosts.show()
+        hosts_obj.show()
 
         quit_button = gtk.Button(stock=gtk.STOCK_QUIT)
         quit_button.connect('clicked', lambda w: gtk.main_quit())
@@ -282,17 +263,116 @@ class HostSelectionGui(object):
         quit_box.pack_start(quit_button, True, False, 0)
         quit_box.show()
 
-        vbox = gtk.VBox(False, 0)
-        vbox.pack_start(hosts, expand=False, fill=False)
+        vbox = gtk.VBox(False, 10)
+        vbox.pack_start(hosts_obj, expand=False, fill=False)
         vbox.pack_end(quit_box, expand=False, fill=False)
 
-        window.add(vbox)
-
+        main_window.add(vbox)
         vbox.show()
-        window.show()
+
+        return main_window
+
+    def create_hosts_selection_window(self, group):
+
+        hosts_window = gtk.Window(type=gtk.WINDOW_POPUP)
+        hosts_window.set_title(group)
+        hosts_window.set_border_width(10)
+        hosts_window.set_modal(True)
+        hosts_window.set_transient_for(self.main_window)
+        hosts_window.set_type_hint(gtk.gdk.WINDOW_TYPE_HINT_DIALOG)
+        hosts_window.set_destroy_with_parent(True)
+        hosts_window.set_keep_above(True)
+        hosts_window.set_position(gtk.WIN_POS_CENTER_ALWAYS)
+        hosts_window.set_resizable(True)
+        hosts_window.set_decorated(True)
+
+        table = self.create_hosts_selection_table(self.groups[group])
+        table.show()
+
+        cancel_button = gtk.Button(stock=gtk.STOCK_CANCEL)
+        cancel_button.connect('clicked', self.group_cancel_callback)
+        cancel_button.show()
+
+        cancel_box = gtk.HBox(False, 0)
+        cancel_box.pack_start(cancel_button, True, False, 0)
+        cancel_box.show()
+
+        vbox = gtk.VBox(False, 10)
+        vbox.pack_start(table, expand=False, fill=False)
+        vbox.pack_end(cancel_box, expand=False, fill=False)
+        hosts_window.add(vbox)
+        vbox.show()
+
+        return hosts_window
+
+    def create_hosts_in_group_frame(self):
+
+        frame = gtk.Frame('Groups')
+        table = gtk.Table(rows=len(self.groups)-1, columns=1, homogeneous=False)
+        idx = 0
+        if self.config.sort_groups:
+            group_iter = sorted(self.groups).__iter__()
+        else:
+            group_iter = self.groups.__iter__()
+        for group in group_iter:
+             button = gtk.Button(group)
+             button.connect('clicked', self.group_callback, group)
+             button.show()
+             idx += 1
+             table.attach(button, 0, 1, idx, idx+1)
+        frame.add(table)
+        table.show()
+
+        return frame
+
+    def create_hosts_by_group_vbox(self):
+
+        vbox = gtk.VBox(False, 0)
+        if self.config.sort_groups:
+            group_iter = sorted(self.groups).__iter__()
+        else:
+            group_iter = self.groups.__iter__()
+
+        for group in group_iter:
+            frame = gtk.Frame(group)
+            table = self.create_hosts_selection_table(self.groups[group], self.hosts)
+
+            frame.add(table)
+            table.show()
+            frame.show()
+            vbox.pack_start(frame, False, True, 5)
+
+        return vbox
+
+    def create_hosts_selection_table(self, hosts, sort=False):
+
+        table = gtk.Table(len(hosts) - 1, 3, False)
+        table.set_col_spacing(0, 5)
+        idx = 0
+        for host in hosts:
+            type_image = gtk.Image()
+            if host.os == OS_TYPE.LINUX:
+                type_image.set_from_file(os.path.join(ICONS_DIR, 'Linux-icon.png'))
+            elif host.os == OS_TYPE.WINDOWS:
+                type_image.set_from_file(os.path.join(ICONS_DIR, 'Windows-icon.png'))
+            type_image.show()
+            table.attach(type_image, 0, 1, idx, idx+1)
+            button = gtk.Button(host.name)
+            button.set_alignment(0, 0)
+            button.connect('clicked', self.host_callback, host)
+            button.show()
+            table.attach(button, 1, 2, idx, idx+1, xpadding=3)
+            desc_label = gtk.Label(host.description)
+            desc_label.set_alignment(0, 0.5)
+            desc_label.show()
+            table.attach(desc_label, 2, 3, idx, idx+1, xpadding=3)
+            idx += 1
+
+        return table
 
     def main(self, host=None):
         gtk.main()
+
 
 def truth_to_bool(word):
     """Convert an english word (Yes, yes, True, true, No, no. False, false, None, or
@@ -307,7 +387,7 @@ def truth_to_bool(word):
 
     raise(RhostException("Invalid truth value '%s'." % word))
 
-def launch_host(host):
+def launch_host(host, config):
 
     if host.os == OS_TYPE.LINUX:
         if host.use_bastion:
@@ -351,16 +431,16 @@ def parse_options():
 
 def main():
 
-    global config
-    global hosts
-    global host_to_launch
-
+    global options
     parse_options()
 
     docs = yaml.load_all(options.config_file, OrderedDictYAMLLoader)
+
     config_doc = docs.next()
     config = Config(**config_doc)
+
     hosts_doc = docs.next()
+    hosts = collections.OrderedDict()
     for (host_name, host_data) in hosts_doc.items():
         hosts[host_name] = Host(config, name=host_name, **host_data)
 
@@ -368,13 +448,19 @@ def main():
         if options.host not in hosts:
             print "Error: unknown host %s" % options.host
             sys.exit(1)
-        launch_host(hosts[options.host])
+        launch_host(hosts[options.host], config)
     else:
         # Sets host_to_launch
-        gui = HostSelectionGui()
+        groups = collections.OrderedDict()
+        for host_name, host in hosts.items():
+            if host.group not in groups:
+                groups[host.group] = [host]
+            else:
+                groups[host.group].append(host)
+        gui = HostSelectionGui(config, hosts, groups)
         gui.main()
         if gui.selected_host:
-            launch_host(gui.selected_host)
+            launch_host(gui.selected_host, config)
 
 if __name__ == '__main__':
 
