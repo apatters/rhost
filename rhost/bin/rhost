@@ -12,6 +12,7 @@ import argparse
 import collections
 import gtk
 import inspect
+import jinja2
 import os
 import sys
 import yaml
@@ -30,7 +31,7 @@ from rhost.trace import TRACE
 options = None
 
 PRG_NAME = utils.get_program_name()
-DEFAULT_CONFIG_FILE = '%s/.%s.yml' % (os.environ['HOME'], PRG_NAME)
+DEFAULT_CONFIG_FILENAME = '%s/.%s.yml' % (os.environ['HOME'], PRG_NAME)
 
 
 class OS_TYPE(utils.Enum):
@@ -410,31 +411,44 @@ def parse_options():
     description = """Open a terminal logged into a remote system."""
 
     version_help = "Show program's version number and exit."
-    config_file_help = "Load configuration information from this file (default '%s')." % DEFAULT_CONFIG_FILE
+    config_filename_help = "Load configuration information from this file (default '%s')." % DEFAULT_CONFIG_FILENAME
     debug_help = 'Output debug information.'
     host_help = "Host to launch."
+    variables_help = 'Jinja2 variable (in X=Y format). Can be specified multiple times.'
 
     parser = argparse.ArgumentParser(prog=PRG_NAME, description=description,
                                      add_help=True)
     parser.add_argument('--version', action='version', version=version,
                         help=version_help)
-    parser.add_argument('-c', '--config', dest='config_file', type=argparse.FileType('r'),
-                        default=DEFAULT_CONFIG_FILE, help=config_file_help)
+    parser.add_argument('-c', '--config', dest='config_filename',
+                        default=DEFAULT_CONFIG_FILENAME, help=config_filename_help)
     parser.add_argument('-d', '--debug', dest='debug', action='store_true',
                         help=debug_help)
 
     parser.add_argument('host', action='store', nargs='?', default=None, help=host_help)
-
+    parser.add_argument('-v', '--variables', action='append',
+                        metavar='VARIABLE', help='variables_help')
 
     options = parser.parse_args()
 
+    if not os.path.exists(options.config_filename):
+        parser.error("Config file '%s' does not exist." % options.config_filename)
+    options.config_filename = os.path.abspath(options.config_filename)
 
 def main():
 
     global options
     parse_options()
 
-    docs = yaml.load_all(options.config_file, OrderedDictYAMLLoader)
+    template_vars = {}
+    if options.variables:
+        template_vars.update(dict(var.split('=', 1) for var in options.variables))
+
+    loader = jinja2.FileSystemLoader('/')
+    env = jinja2.Environment(loader=loader,
+                             undefined=jinja2.Undefined)
+    template = env.get_template(options.config_filename)
+    docs = yaml.load_all(template.render(template_vars), OrderedDictYAMLLoader)
 
     config_doc = docs.next()
     config = Config(**config_doc)

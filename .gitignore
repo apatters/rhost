@@ -1,0 +1,8 @@
+.pybuild
+build
+debian/debhelper-build-stamp
+debian/files
+debian/rhost.postinst.debhelper
+debian/rhost.prerm.debhelper
+debian/rhost.substvars
+debian/rhost/

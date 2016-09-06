@@ -1,3 +1,9 @@
+rhost (1.1) UNRELEASED; urgency=medium
+
+  * Prepocess YAML configuration file with jinja2.
+
+ -- Andrew Patterson <andrew.patterson@hpe.com>  Wed, 03 Aug 2016 16:23:44 -0600
+
 rhost (1.0) UNRELEASED; urgency=medium
 
   * Initial release.

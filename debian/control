@@ -16,6 +16,7 @@ Package: rhost
 Architecture: all
 Depends: ${misc:Depends},
          ${python:Depends},
+         python-jinja2,
 Description: Launch a terminal for a remote host.
  Launch a terminal logged into a remote host from selection GUI.
  
