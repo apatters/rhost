@@ -4,7 +4,7 @@
 __copyright__ = 'Copyright (C) 2016 Andrew Patterson'
 __credits__ = ['Andrew Patterson']
 __license__ = 'Proprietary'
-__version__ = '1.0'
+__version__ = '1.1'
 __maintainer__ = 'Andrew Patterson'
 __email__ = 'andrew.patterson@hpe.com'
 
@@ -14,6 +14,7 @@ import gtk
 import inspect
 import jinja2
 import os
+import socket
 import sys
 import yaml
 
@@ -435,14 +436,19 @@ def parse_options():
         parser.error("Config file '%s' does not exist." % options.config_filename)
     options.config_filename = os.path.abspath(options.config_filename)
 
-def main():
 
-    global options
-    parse_options()
+def load_config():
 
     template_vars = {}
     if options.variables:
         template_vars.update(dict(var.split('=', 1) for var in options.variables))
+    # Inject running domain.
+    if 'running_fqdn' not in template_vars:
+        template_vars['running_fqdn'] = socket.getfqdn()
+    if 'running_hostname' not in template_vars:
+        template_vars['running_hostname'] = template_vars['running_fqdn'].partition('.')[0]
+    if 'running_domain' not in template_vars:
+        template_vars['running_domain'] = template_vars['running_fqdn'].partition('.')[2]
 
     loader = jinja2.FileSystemLoader('/')
     env = jinja2.Environment(loader=loader,
@@ -457,6 +463,15 @@ def main():
     hosts = collections.OrderedDict()
     for (host_name, host_data) in hosts_doc.items():
         hosts[host_name] = Host(config, name=host_name, **host_data)
+
+    return config, hosts
+
+def main():
+
+    global options
+    parse_options()
+
+    config, hosts = load_config()
 
     if options.host:
         if options.host not in hosts:
