@@ -4,7 +4,7 @@
 __copyright__ = 'Copyright (C) 2016 Andrew Patterson'
 __credits__ = ['Andrew Patterson']
 __license__ = 'Proprietary'
-__version__ = '1.1'
+__version__ = '1.2'
 __maintainer__ = 'Andrew Patterson'
 __email__ = 'andrew.patterson@hpe.com'
 
@@ -14,6 +14,7 @@ import gtk
 import inspect
 import jinja2
 import os
+import shlex
 import socket
 import sys
 import yaml
@@ -400,7 +401,7 @@ def launch_host(host, config):
         cmd  = host.substitute_fields(config.default_windows_terminal_cmd)
     if options.debug:
         print(cmd)
-    cmd = cmd.split()
+    cmd = shlex.split(cmd)
     os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
 
 def parse_options():
