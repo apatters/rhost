@@ -1,6 +1,8 @@
 #!/usr/bin/env python
 """Open a terminal logged into a remote system."""
 
+from __future__ import print_function
+
 __copyright__ = 'Copyright (C) 2016 Andrew Patterson'
 __credits__ = ['Andrew Patterson']
 __license__ = 'Proprietary'
@@ -130,7 +132,7 @@ class Config(object):
                                                        self.DEFAULT_WINDOWS_TERMINAL_CMD)
 
     def __str__(self):
-        fmt_str = '%r:%r ' * 13
+        fmt_str = '\t%s: %r\n' * 14
         return fmt_str % (
             'sort_hosts', self.sort_hosts,
             'sort_groups', self.sort_groups,
@@ -399,8 +401,11 @@ def launch_host(host, config):
             cmd = host.substitute_fields(config.default_linux_terminal_cmd)
     elif host.os == OS_TYPE.WINDOWS:
         cmd  = host.substitute_fields(config.default_windows_terminal_cmd)
+
     if options.debug:
-        print(cmd)
+        print("Launch command:")
+        print("\t%s" % cmd)
+
     cmd = shlex.split(cmd)
     os.execvp(cmd[0], [os.path.basename(cmd[0])] + cmd[1:])
 
@@ -417,6 +422,9 @@ def parse_options():
     debug_help = 'Output debug information.'
     host_help = "Host to launch."
     variables_help = 'Jinja2 variable (in X=Y format). Can be specified multiple times.'
+    variables_filename_help = """\
+Jinja2 variables (in X=Y format) read from a filename.  Can be used in conjunction with -v|--variable.
+-Any v|--variable values will override values from the file"""
 
     parser = argparse.ArgumentParser(prog=PRG_NAME, description=description,
                                      add_help=True)
@@ -428,19 +436,29 @@ def parse_options():
                         help=debug_help)
 
     parser.add_argument('host', action='store', nargs='?', default=None, help=host_help)
-    parser.add_argument('-v', '--variables', action='append',
+    parser.add_argument('-v', '--variable', dest='variables', action='append',
                         metavar='VARIABLE', help='variables_help')
+    parser.add_argument('-V', '--variables-file', dest='variables_filename',
+                        help=variables_filename_help)
 
     options = parser.parse_args()
 
     if not os.path.exists(options.config_filename):
         parser.error("Config file '%s' does not exist." % options.config_filename)
     options.config_filename = os.path.abspath(options.config_filename)
-
+    if options.variables_filename:
+        if not os.path.exists(options.variables_filename):
+            parser.error("Variables file '%s' does not exist." % options.variables_filename)
+        options.variables_filename = os.path.abspath(options.variables_filename)
 
 def load_config():
 
     template_vars = {}
+    if options.variables_filename:
+        with open(options.variables_filename) as variables_file:
+            for line in variables_file:
+                (key, sep, val) = line.partition('=')
+                template_vars[key] = val[:-1]
     if options.variables:
         template_vars.update(dict(var.split('=', 1) for var in options.variables))
     # Inject running domain.
@@ -450,6 +468,11 @@ def load_config():
         template_vars['running_hostname'] = template_vars['running_fqdn'].partition('.')[0]
     if 'running_domain' not in template_vars:
         template_vars['running_domain'] = template_vars['running_fqdn'].partition('.')[2]
+
+    if options.debug:
+        print("Variables: ")
+        for key, val in template_vars.items():
+            print("\t%s=%s" % (key, val))
 
     loader = jinja2.FileSystemLoader('/')
     env = jinja2.Environment(loader=loader,
@@ -465,6 +488,10 @@ def load_config():
     for (host_name, host_data) in hosts_doc.items():
         hosts[host_name] = Host(config, name=host_name, **host_data)
 
+    if options.debug:
+        print('Configuration values:')
+        print(config, end='')
+
     return config, hosts
 
 def main():
@@ -476,7 +503,7 @@ def main():
 
     if options.host:
         if options.host not in hosts:
-            print "Error: unknown host %s" % options.host
+            print("Error: unknown host %s" % options.host)
             sys.exit(1)
         launch_host(hosts[options.host], config)
     else:
