@@ -1,3 +1,12 @@
+rhost (1.2) UNRELEASED; urgency=medium
+
+  * Can use .rhost.d directory for YAML templates.
+  * Added -V|--variables-file option to read variable settings from a file.
+  * Properly process quotes in linux/windows terminal commands.
+  * Insert hostname, domainname, and fqdn into template variables.
+
+ -- Andrew Patterson <andrew.patterson@hpe.com>  Mon, 27 Feb 2017 21:41:29 -0700
+
 rhost (1.1) UNRELEASED; urgency=medium
 
   * Prepocess YAML configuration file with jinja2.
