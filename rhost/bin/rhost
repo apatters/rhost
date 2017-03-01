@@ -6,7 +6,7 @@ from __future__ import print_function
 __copyright__ = 'Copyright (C) 2016 Andrew Patterson'
 __credits__ = ['Andrew Patterson']
 __license__ = 'Proprietary'
-__version__ = '1.2'
+__version__ = '1.3'
 __maintainer__ = 'Andrew Patterson'
 __email__ = 'andrew.patterson@hpe.com'
 
@@ -39,6 +39,8 @@ DEFAULT_CONFIG_FILENAME = '%s/.%s.yml' % (os.environ['HOME'], PRG_NAME)
 
 
 class OS_TYPE(utils.Enum):
+    """Enumerate the different types of supported operating systems."""
+
     UNKNOWN = 0
     LINUX = 1
     WINDOWS = 2
@@ -70,7 +72,8 @@ class OrderedDictYAMLLoader(yaml.Loader):
         if isinstance(node, yaml.MappingNode):
             self.flatten_mapping(node)
         else:
-            raise yaml.constructor.ConstructorError(None, None,
+            raise yaml.constructor.ConstructorError(
+                None, None,
                 'expected a mapping node, but found %s' % node.id, node.start_mark)
 
         mapping = collections.OrderedDict()
@@ -80,7 +83,8 @@ class OrderedDictYAMLLoader(yaml.Loader):
                 hash(key)
             except TypeError, exc:
                 raise yaml.constructor.ConstructorError('while constructing a mapping',
-                    node.start_mark, 'found unacceptable key (%s)' % exc, key_node.start_mark)
+                                                        node.start_mark,
+                                                        'found unacceptable key (%s)' % exc, key_node.start_mark)
             value = self.construct_object(value_node, deep=deep)
             mapping[key] = value
         return mapping
@@ -96,17 +100,13 @@ class RhostException(Exception):
 class Config(object):
     """Holds configuration data."""
 
-    DEFAULT_SORT_HOSTS = False
-    DEFAULT_SORT_GROUPS = False
-    DEFAULT_USE_GROUP_BUTTONS = False
     DEFAULT_DESCRIPTION = None
     DEFAULT_USER = None
     DEFAULT_DOMAIN = None
     DEFAULT_OS = OS_TYPE.LINUX
     DEFAULT_USE_BASTION = False
-    DEFAULT_BASTION_FQDN =  None
+    DEFAULT_BASTION_FQDN = None
     DEFAULT_BASTION_USER = None
-    DEFAULT_GROUP = None
     DEFAULT_LINUX_TERMINAL_CMD = '/usr/bin/gnome-terminal -x ssh -X %u@%f'
     DEFAULT_LINUX_TERMINAL_WITH_BASTION_CMD = '/usr/bin/gnome-terminal -x ssh -t %U@%b ssh -X %u@%f'
     DEFAULT_WINDOWS_TERMINAL_CMD = '/usr/bin/rdesktop -T %n -u %u -d %D %f'
@@ -114,9 +114,7 @@ class Config(object):
     def __init__(self, *pargs, **kwargs):
         """Constructor."""
 
-        self.sort_hosts = truth_to_bool(kwargs.pop('sort_hosts', self.DEFAULT_SORT_HOSTS))
-        self.sort_groups = truth_to_bool(kwargs.pop('sort_groups', self.DEFAULT_SORT_GROUPS))
-        self.use_group_buttons = truth_to_bool(kwargs.pop('use_group_buttons', self.DEFAULT_USE_GROUP_BUTTONS))
+
         self.default_description = kwargs.pop('default_description', self.DEFAULT_DESCRIPTION)
         self.default_user = kwargs.pop('default_user', self.DEFAULT_USER)
         self.default_domain = kwargs.pop('default_domain', self.DEFAULT_DOMAIN)
@@ -124,7 +122,6 @@ class Config(object):
         self.default_use_bastion = truth_to_bool(kwargs.pop('default_use_bastion', self.DEFAULT_USE_BASTION))
         self.default_bastion_fqdn = kwargs.pop('default_bastion_fqdn', self.DEFAULT_BASTION_FQDN)
         self.default_bastion_user = kwargs.pop('default_bastion_user', self.DEFAULT_BASTION_USER)
-        self.default_group = kwargs.pop('default_group', self.DEFAULT_GROUP)
         self.default_linux_terminal_cmd = kwargs.pop('default_linux_terminal_cmd', self.DEFAULT_LINUX_TERMINAL_CMD)
         self.default_linux_terminal_with_bastion_cmd = kwargs.pop('default_linux_terminal_with_bastion_cmd',
                                                                   self.DEFAULT_LINUX_TERMINAL_WITH_BASTION_CMD)
@@ -132,11 +129,8 @@ class Config(object):
                                                        self.DEFAULT_WINDOWS_TERMINAL_CMD)
 
     def __str__(self):
-        fmt_str = '\t%s: %r\n' * 14
+        fmt_str = '\t%s: %r\n' * 10
         return fmt_str % (
-            'sort_hosts', self.sort_hosts,
-            'sort_groups', self.sort_groups,
-            'use_group_buttons', self.use_group_buttons,
             'default_description', self.default_description,
             'default_user', self.default_user,
             'default_domain', self.default_domain,
@@ -144,13 +138,174 @@ class Config(object):
             'default_use_bastion', self.default_use_bastion,
             'default_bastion_fqdn', self.default_bastion_fqdn,
             'default_bastion_user', self.default_bastion_user,
-            'default_group', self.default_group,
             'default_linux_terminal_cmd', self.default_linux_terminal_cmd,
             'default_linux_terminal_with_bastion_cmd', self.default_linux_terminal_with_bastion_cmd,
             'default_windows_terminal_cmd', self.default_windows_terminal_cmd,
         )
 
+
+class GlobalConfig(Config):
+    """Holds group configuration data."""
+
+    DEFAULT_SORT_HOSTS = False
+    DEFAULT_SORT_GROUPS = False
+    DEFAULT_USE_GROUP_BUTTONS = False
+    DEFAULT_GROUP = None
+
+    def __init__(self, *pargs, **kwargs):
+        """Constructor."""
+
+        Config.__init__(self, *pargs, **kwargs)
+        self.sort_hosts = truth_to_bool(kwargs.pop('sort_hosts', self.DEFAULT_SORT_HOSTS))
+        self.sort_groups = truth_to_bool(kwargs.pop('sort_groups', self.DEFAULT_SORT_GROUPS))
+        self.use_group_buttons = truth_to_bool(kwargs.pop('use_group_buttons', self.DEFAULT_USE_GROUP_BUTTONS))
+        self.default_group = kwargs.pop('default_group', self.DEFAULT_GROUP)
+
+    def __str__(self):
+        fmt_str = '\t%s: %r\n' * 4
+        return Config.__str__(self) + fmt_str % (
+            'sort_hosts', self.sort_hosts,
+            'sort_groups', self.sort_groups,
+            'use_group_buttons', self.use_group_buttons,
+            'default_group', self.default_group,
+        )
+
+
+class GroupConfig(Config):
+    """Holds configuration data."""
+
+    def __init__(self, *pargs, **kwargs):
+        """Constructor."""
+
+        Config.__init__(self, *pargs, **kwargs)
+
+class ConfigMgr(object):
+    """Manage access to global and group config data."""
+
+    def __init__(self, *pargs, **kwargs):
+        """Constructor."""
+
+        self._global_config = GlobalConfig(**kwargs)
+        self._group_configs = {}
+        if 'groups' in kwargs:
+            for group, group_data in kwargs['groups'].items():
+                self._group_configs[group] = GroupConfig(**group_data)
+
+    def __str__(self):
+        """Pretty version of ConfigMgr object."""
+
+        s = 'Global configuration:\n'
+        s += self._global_config.__str__()
+        for group in self._group_configs:
+            s += "Group '%s' configuration:\n" % group
+            s += self._group_configs[group].__str__()
+
+        return s
+
+    def get_sort_hosts(self):
+        """ Global sort_hosts accessor."""
+
+        return self._global_config.sort_hosts
+
+    def get_sort_groups(self):
+        """ Global sort_groups accessor."""
+
+        return self._global_config.sort_groups
+
+    def get_use_group_buttons(self):
+        """ Global use_group_buttons accessor."""
+
+        return self._global_config.use_group_buttons
+
+    def get_default_group(self):
+        """ Global default_groups accessor."""
+
+        return self._global_config.default_group
+
+    def get_default_description(self, group=None):
+        """ Group default_description accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_description
+        else:
+            return self._group_configs[group].default_description
+
+    def get_default_user(self, group=None):
+        """ Group default_user accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_user
+        else:
+            return self._group_configs[group].default_user
+
+    def get_default_domain(self, group=None):
+        """ Group default_domain accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_domain
+        else:
+            return self._group_configs[group].default_domain
+
+    def get_default_os(self, group=None):
+        """ Group default_os accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_os
+        else:
+            return self._group_configs[group].default_os
+
+    def get_default_use_bastion(self, group=None):
+        """ Group default_use_bastion accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_use_bastion
+        else:
+            return self._group_configs[group].default_use_bastion
+
+    def get_default_bastion_fqdn(self, group=None):
+        """ Group default_bastion_fqdn accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_bastion_fqdn
+        else:
+            return self._group_configs[group].default_bastion_fqdn
+
+    def get_default_bastion_user(self, group=None):
+        """ Group default_bastion_user accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_bastion_user
+        else:
+            return self._group_configs[group].default_bastion_user
+
+    def get_default_linux_terminal_cmd(self, group=None):
+        """ Group default_linux_terminal_command accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_linux_terminal_cmd
+        else:
+            return self._group_configs[group].default_linux_terminal_cmd
+
+    def get_default_linux_terminal_with_bastion_cmd(self, group=None):
+        """ Group default_linux_terminal_with_bastion_cmd accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_linux_terminal_with_bastion_cmd
+        else:
+            return self._group_configs[group].default_linux_terminal_with_bastion_cmd
+
+    def get_default_windows_terminal_cmd(self, group=None):
+        """ Group default_windows_terminal_cmd accessor."""
+
+        if not group or group not in self._group_configs:
+            return self._global_config.default_windows_terminal_cmd
+        else:
+            return self._group_configs[group].default_windows_terminal_cmd
+
+
 class Host(object):
+    """Encapsulate a host/server."""
+
     def __init__(self, config, *pargs, **kwargs):
         """Constructor."""
 
@@ -162,14 +317,15 @@ class Host(object):
         if not self.fqdn:
             raise RhostException("Missing 'fqdn' in host definition,")
 
-        self.description = kwargs.pop('description', config.default_description)
-        self.user = kwargs.pop('user', config.default_user)
-        self.domain = kwargs.pop('domain', config.default_domain)
-        self.os = OS_TYPE.val(kwargs.pop('os', OS_TYPE.str(config.default_os)))
-        self.use_bastion = kwargs.pop('use_bastion', config.default_use_bastion)
-        self.bastion_fqdn = kwargs.pop('bastion_fqdn', config.default_bastion_fqdn)
-        self.bastion_user = kwargs.pop('bastion_user', config.default_bastion_user)
-        self.group = kwargs.pop('group', config.default_group)
+        self.group = kwargs.pop('group', config.get_default_group())
+
+        self.description = kwargs.pop('description', config.get_default_description(self.group))
+        self.user = kwargs.pop('user', config.get_default_user(self.group))
+        self.domain = kwargs.pop('domain', config.get_default_domain(self.group))
+        self.os = OS_TYPE.val(kwargs.pop('os', OS_TYPE.str(config.get_default_os(self.group))))
+        self.use_bastion = kwargs.pop('use_bastion', config.get_default_use_bastion(self.group))
+        self.bastion_fqdn = kwargs.pop('bastion_fqdn', config.get_default_bastion_fqdn(self.group))
+        self.bastion_user = kwargs.pop('bastion_user', config.get_default_bastion_user(self.group))
 
         if kwargs:
             invalid_parms = ', '.join(kwargs.keys())
@@ -192,7 +348,7 @@ class Host(object):
             'group', self.group,)
 
     def __lt__(self, other):
-        return self.name.lower() < other.name,lower()
+        return self.name.lower() < other.name.lower()
 
     def substitute_fields(self, s):
         """Make host field substitutions in string s."""
@@ -211,8 +367,10 @@ class Host(object):
 
 
 class HostSelectionGui(object):
+    """Manages the host selection GUI."""
 
     def __init__(self, config, hosts, groups):
+        """Constructor."""
 
         self.config = config
         self.hosts = hosts
@@ -227,6 +385,7 @@ class HostSelectionGui(object):
         self.main_window.show()
 
     def host_callback(self, widget, host):
+        """Callback when host is selected."""
 
         self.selected_host = host
         gtk.main_quit()
@@ -234,6 +393,7 @@ class HostSelectionGui(object):
         return False
 
     def group_callback(self, widget, group):
+        """Callback when group is selected."""
 
 
         self.selected_group = group
@@ -243,20 +403,22 @@ class HostSelectionGui(object):
         return False
 
     def group_cancel_callback(self, widget):
+        """Callback when group selection is cancelled."""
 
         self.hosts_selection_window.destroy()
 
     def create_main_window(self):
+        """Present the main window."""
 
         main_window = gtk.Window(gtk.WINDOW_TOPLEVEL)
         main_window.set_title("Remote Host")
         main_window.set_border_width(10)
         main_window.set_geometry_hints(min_width=200)
 
-        if self.config.use_group_buttons:
+        if self.config.get_use_group_buttons():
             hosts_obj = self.create_hosts_in_group_frame()
         else:
-             hosts_obj = self.create_hosts_by_group_vbox()
+            hosts_obj = self.create_hosts_by_group_vbox()
 
         hosts_obj.show()
 
@@ -278,6 +440,7 @@ class HostSelectionGui(object):
         return main_window
 
     def create_hosts_selection_window(self, group):
+        """Creat the hosts selection window."""
 
         hosts_window = gtk.Window(type=gtk.WINDOW_POPUP)
         hosts_window.set_title(group)
@@ -311,29 +474,31 @@ class HostSelectionGui(object):
         return hosts_window
 
     def create_hosts_in_group_frame(self):
+        """Create a host selection frame."""
 
         frame = gtk.Frame('Groups')
         table = gtk.Table(rows=len(self.groups)-1, columns=1, homogeneous=False)
         idx = 0
-        if self.config.sort_groups:
+        if self.config.get_sort_groups():
             group_iter = sorted(self.groups, key=str.lower).__iter__()
         else:
             group_iter = self.groups.__iter__()
         for group in group_iter:
-             button = gtk.Button(group)
-             button.connect('clicked', self.group_callback, group)
-             button.show()
-             idx += 1
-             table.attach(button, 0, 1, idx, idx+1)
+            button = gtk.Button(group)
+            button.connect('clicked', self.group_callback, group)
+            button.show()
+            idx += 1
+            table.attach(button, 0, 1, idx, idx+1)
         frame.add(table)
         table.show()
 
         return frame
 
     def create_hosts_by_group_vbox(self):
+        """Create a host selection box."""
 
         vbox = gtk.VBox(False, 0)
-        if self.config.sort_groups:
+        if self.config.get_sort_groups():
             group_iter = sorted(self.groups).__iter__()
         else:
             group_iter = self.groups.__iter__()
@@ -349,7 +514,8 @@ class HostSelectionGui(object):
 
         return vbox
 
-    def create_hosts_selection_table(self, hosts, sort=False):
+    def create_hosts_selection_table(self, hosts):
+        """Create a host selection table."""
 
         table = gtk.Table(len(hosts) - 1, 3, False)
         table.set_col_spacing(0, 5)
@@ -375,7 +541,9 @@ class HostSelectionGui(object):
 
         return table
 
-    def main(self, host=None):
+    def main(self):
+        """Kick off the GUI."""
+
         gtk.main()
 
 
@@ -383,24 +551,25 @@ def truth_to_bool(word):
     """Convert an english word (Yes, yes, True, true, No, no. False, false, None, or
     empty string) to a boolean."""
 
-    if type(word) == bool:
+    if isinstance(word, bool):
         return word
     if not word or word.lower() in ('no', 'false'):
         return False
     if word.lower() in ('yes', 'true'):
         return True
 
-    raise(RhostException("Invalid truth value '%s'." % word))
+    raise RhostException("Invalid truth value '%s'." % word)
 
 def launch_host(host, config):
+    """Run the external terminal command and connect to the host."""
 
     if host.os == OS_TYPE.LINUX:
         if host.use_bastion:
-            cmd = host.substitute_fields(config.default_linux_terminal_with_bastion_cmd)
+            cmd = host.substitute_fields(config.get_default_linux_terminal_with_bastion_cmd(host.group))
         else:
-            cmd = host.substitute_fields(config.default_linux_terminal_cmd)
+            cmd = host.substitute_fields(config.get_default_linux_terminal_cmd(host.group))
     elif host.os == OS_TYPE.WINDOWS:
-        cmd  = host.substitute_fields(config.default_windows_terminal_cmd)
+        cmd = host.substitute_fields(config.get_default_windows_terminal_cmd(host.group))
 
     if options.debug:
         print("Launch command:")
@@ -412,7 +581,7 @@ def launch_host(host, config):
 def parse_options():
     """Parse command-line options."""
 
-    global options
+    options = None
 
     version = '%s %s' % (PRG_NAME, __version__)
     description = """Open a terminal logged into a remote system."""
@@ -451,7 +620,10 @@ Jinja2 variables (in X=Y format) read from a filename.  Can be used in conjuncti
             parser.error("Variables file '%s' does not exist." % options.variables_filename)
         options.variables_filename = os.path.abspath(options.variables_filename)
 
+    return options
+
 def load_config():
+    """Load the user's configuration file."""
 
     template_vars = {}
     if options.variables_filename:
@@ -487,23 +659,25 @@ def load_config():
     docs = yaml.load_all(template.render(template_vars), OrderedDictYAMLLoader)
 
     config_doc = docs.next()
-    config = Config(**config_doc)
+    config = ConfigMgr(**config_doc)
+
+    if options.debug:
+        print('Configuration values:')
+        print(config, end='')
 
     hosts_doc = docs.next()
     hosts = collections.OrderedDict()
     for (host_name, host_data) in hosts_doc.items():
         hosts[host_name] = Host(config, name=host_name, **host_data)
 
-    if options.debug:
-        print('Configuration values:')
-        print(config, end='')
 
     return config, hosts
 
 def main():
+    """Let's go."""
 
     global options
-    parse_options()
+    options = parse_options()
 
     config, hosts = load_config()
 
