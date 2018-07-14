@@ -100,9 +100,8 @@ class RhostException(Exception):
 class Config(object):
     """Holds configuration data."""
 
-    DEFAULT_DESCRIPTION = None
     DEFAULT_USER = None
-    DEFAULT_DOMAIN = None
+    DEFAULT_WINDOWS_DOMAIN = None
     DEFAULT_OS = OS_TYPE.LINUX
     DEFAULT_USE_BASTION = False
     DEFAULT_BASTION_FQDN = None
@@ -115,9 +114,8 @@ class Config(object):
         """Constructor."""
 
 
-        self.default_description = kwargs.pop('default_description', self.DEFAULT_DESCRIPTION)
         self.default_user = kwargs.pop('default_user', self.DEFAULT_USER)
-        self.default_domain = kwargs.pop('default_domain', self.DEFAULT_DOMAIN)
+        self.default_windows_domain = kwargs.pop('default_windows_domain', self.DEFAULT_WINDOWS_DOMAIN)
         self.default_os = OS_TYPE.val(kwargs.pop('default_os', OS_TYPE.str(self.DEFAULT_OS)))
         self.default_use_bastion = truth_to_bool(kwargs.pop('default_use_bastion', self.DEFAULT_USE_BASTION))
         self.default_bastion_fqdn = kwargs.pop('default_bastion_fqdn', self.DEFAULT_BASTION_FQDN)
@@ -129,11 +127,10 @@ class Config(object):
                                                        self.DEFAULT_WINDOWS_TERMINAL_CMD)
 
     def __str__(self):
-        fmt_str = '\t%s: %r\n' * 10
+        fmt_str = '\t%s: %r\n' * 9
         return fmt_str % (
-            'default_description', self.default_description,
             'default_user', self.default_user,
-            'default_domain', self.default_domain,
+            'default_windows_domain', self.default_windows_domain,
             'default_os', OS_TYPE.str(self.default_os),
             'default_use_bastion', self.default_use_bastion,
             'default_bastion_fqdn', self.default_bastion_fqdn,
@@ -222,14 +219,6 @@ class ConfigMgr(object):
 
         return self._global_config.default_group
 
-    def get_default_description(self, group=None):
-        """ Group default_description accessor."""
-
-        if not group or group not in self._group_configs:
-            return self._global_config.default_description
-        else:
-            return self._group_configs[group].default_description
-
     def get_default_user(self, group=None):
         """ Group default_user accessor."""
 
@@ -238,13 +227,13 @@ class ConfigMgr(object):
         else:
             return self._group_configs[group].default_user
 
-    def get_default_domain(self, group=None):
-        """ Group default_domain accessor."""
+    def get_default_windows_domain(self, group=None):
+        """ Group default_windows_domain accessor."""
 
         if not group or group not in self._group_configs:
-            return self._global_config.default_domain
+            return self._global_config.default_windows_domain
         else:
-            return self._group_configs[group].default_domain
+            return self._group_configs[group].default_windows_domain
 
     def get_default_os(self, group=None):
         """ Group default_os accessor."""
@@ -318,14 +307,16 @@ class Host(object):
             raise RhostException("Missing 'fqdn' in host definition,")
 
         self.group = kwargs.pop('group', config.get_default_group())
-
-        self.description = kwargs.pop('description', config.get_default_description(self.group))
+        self.description = kwargs.pop('description', '')
         self.user = kwargs.pop('user', config.get_default_user(self.group))
-        self.domain = kwargs.pop('domain', config.get_default_domain(self.group))
+        self.windows_domain = kwargs.pop('windows_domain', config.get_default_windows_domain(self.group))
         self.os = OS_TYPE.val(kwargs.pop('os', OS_TYPE.str(config.get_default_os(self.group))))
         self.use_bastion = kwargs.pop('use_bastion', config.get_default_use_bastion(self.group))
         self.bastion_fqdn = kwargs.pop('bastion_fqdn', config.get_default_bastion_fqdn(self.group))
         self.bastion_user = kwargs.pop('bastion_user', config.get_default_bastion_user(self.group))
+        self.linux_terminal_cmd = config.get_default_linux_terminal_cmd(self.group)
+        self.linux_terminal_with_bastion_cmd = config.get_default_linux_terminal_with_bastion_cmd(self.group)
+        self.windows_terminal_cmd = config.get_default_windows_terminal_cmd(self.group)
 
         if kwargs:
             invalid_parms = ', '.join(kwargs.keys())
@@ -334,18 +325,22 @@ class Host(object):
             raise RhostException("Positional arguments not allowed in Host constructor.")
 
     def __str__(self):
-        fmt_str = '%r:%r ' * 10
+        fmt_str = '\t%s: %r\n' * 13
         return fmt_str % (
             'name', self.name,
             'fqdn', self.fqdn,
             'description', self.description,
             'user', self.user,
-            'domain', self.domain,
+            'windows_domain', self.windows_domain,
             'os', OS_TYPE.str(self.os),
             'use_bastion', self.use_bastion,
             'bastion_fqdn', self.bastion_fqdn,
             'bastion_user', self.bastion_user,
-            'group', self.group,)
+            'group', self.group,
+            'linux_terminal_cmd', self.linux_terminal_cmd,
+            'linux_terminal_with_bastion_cmd', self.linux_terminal_with_bastion_cmd,
+            'windows_terminal_cmd', self.windows_terminal_cmd
+        )
 
     def __lt__(self, other):
         return self.name.lower() < other.name.lower()
@@ -357,7 +352,7 @@ class Host(object):
         s = s.replace('%f', self.fqdn or '')
         s = s.replace('%d', self.description or '')
         s = s.replace('%u', self.user or '')
-        s = s.replace('%D', self.domain or '')
+        s = s.replace('%D', self.windows_domain or '')
         s = s.replace('%o', OS_TYPE.str(self.os) or '')
         s = s.replace('%b', self.bastion_fqdn or '')
         s = s.replace('%U', self.bastion_user or '')
@@ -665,10 +660,14 @@ def load_config():
         print('Configuration values:')
         print(config, end='')
 
+    if options.debug:
+        print('Hosts:')
     hosts_doc = docs.next()
     hosts = collections.OrderedDict()
     for (host_name, host_data) in hosts_doc.items():
         hosts[host_name] = Host(config, name=host_name, **host_data)
+        if options.debug:
+            print(hosts[host_name])
 
 
     return config, hosts
